@@ -103,7 +103,7 @@ cp .env.example .env
 `.env` 파일에서 필수 항목을 설정합니다(세부 항목은 [`.env.example`](.env.example) 및 [배포 가이드](docs/deploy.md) 참조):
 
 ```dotenv
-SITE_URL=http://localhost:3000
+SITE_URL=http://localhost:9000
 ADMIN_PASSWORD=<관리자_비밀번호>
 SESSION_SECRET=<32자_이상_랜덤_시크릿>
 IMG_PROXY_SIGN_SECRET=<32자_이상_랜덤_시크릿>
@@ -129,9 +129,9 @@ docker compose up -d --build
 ```
 
 기동 완료 후:
-- **웹 포털**: <http://localhost:3000>
-- **관리자 콘솔**: <http://localhost:3000/admin>
-- **에이전트 연동 안내**: <http://localhost:3000/agent> (`/api/mcp`, `/openapi-v1.json`, `/llms.txt`, `/feed.xml`)
+- **웹 포털**: <http://localhost:9000>
+- **관리자 콘솔**: <http://localhost:9000/admin>
+- **에이전트 연동 안내**: <http://localhost:9000/agent> (`/api/mcp`, `/openapi-v1.json`, `/llms.txt`, `/feed.xml`)
 
 ---
 
@@ -141,8 +141,8 @@ docker compose up -d --build
 
 ```bash
 docker compose ps
-curl -s http://localhost:3000/api/health
-node scripts/smoke.ts --base http://localhost:3000
+curl -s http://localhost:9000/api/health
+node scripts/smoke.ts --base http://localhost:9000
 ```
 
 ### 2. API 사용량 제한(`429` / `provider.stop`) 발생 시 즉시 재개
@@ -194,7 +194,7 @@ npm run test:standalone
 DATABASE_URL=postgres://127.0.0.1:5432/gsi_test npm test
 npm run build -w @aihot/web
 npm run test:web
-node scripts/smoke.ts --base http://localhost:3000
+node scripts/smoke.ts --base http://localhost:9000
 ```
 
 > **참고**: `npm run test:web` 내 Playwright E2E 스펙(5개 파일)을 실행하려면 실행 호스트에 Chromium/WebKit Playwright 브라우저 바이너리가 설치되어 있어야 합니다.
