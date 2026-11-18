@@ -1,0 +1,680 @@
+{
+  "$comment": "글로벌 안보 인텔리전스 허브 기본 수집 정보원(북한 전담 10개 + 러·일·중·미/UN/사이버 키워드 필터 14개 = 총 24개 OSINT 피드): 최초 기동 시 자동 등록되며(scripts/seed.ts), 이미 등록된 정보원은 덮어쓰지 않습니다. 이후 관리자 페이지(/admin/sources)에서 추가·수정·일시정지할 수 있습니다.",
+  "sources": [
+    {
+      "id": "rss-yonhap-nk",
+      "name": "연합뉴스 · 북한",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.yna.co.kr/rss/northkorea.xml",
+        "_aihot": {
+          "initialBackfillLimit": 10
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 30,
+      "tags": [
+        "통신사",
+        "대북동향"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-spnews",
+      "name": "SPN 서울평양뉴스 (노동신문·KCNA/대북전문)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.spnews.co.kr/rss/allArticle.xml",
+        "_aihot": {
+          "initialBackfillLimit": 10
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 30,
+      "tags": [
+        "대북전문",
+        "북한관영분석"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-dailynk",
+      "name": "데일리NK (Daily NK · 북중접경/북한내부 전문)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.dailynk.com/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 45,
+      "tags": [
+        "대북전문",
+        "북중접경"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-dailynk-en",
+      "name": "Daily NK English (북한 내부·대북제재 영문)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.dailynk.com/english/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 60,
+      "tags": [
+        "대북전문",
+        "대북제재"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-nknews",
+      "name": "NK News (북한 전문 미디어)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.nknews.org/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 45,
+      "tags": [
+        "전문매체",
+        "대북동향"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-voa-korea",
+      "name": "VOA 한국어 (미국의소리 · 대북/워싱턴 안보)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.voakorea.com/api/",
+        "_aihot": {
+          "initialBackfillLimit": 10
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 30,
+      "tags": [
+        "대북전문",
+        "워싱턴외교"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-rfa-korea",
+      "name": "RFA 자유아시아방송 한국어 (대북·북중접경)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.rfa.org/korean/RSS",
+        "_aihot": {
+          "initialBackfillLimit": 10
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 30,
+      "tags": [
+        "대북전문",
+        "북한내부"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-tongilnews",
+      "name": "통일뉴스 (대북·남북관계 전문)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.tongilnews.com/rss/allArticle.xml",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 60,
+      "tags": [
+        "대북전문",
+        "남북관계"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-38north",
+      "name": "38 North (스팀슨센터 대북·위성 분석)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.38north.org/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 90,
+      "tags": [
+        "싱크탱크",
+        "대북분석"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-csis-beyond-parallel",
+      "name": "CSIS · Beyond Parallel (분단 너머 · 위성판독)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://beyondparallel.csis.org/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 90,
+      "tags": [
+        "싱크탱크",
+        "위성판독"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-tass-ru",
+      "name": "타스 통신 (ТАСС · 러북/한반도 선별)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://tass.ru/rss/v2.xml",
+        "ingestNoiseFilter": {
+          "requireMarkers": [
+            "кндр",
+            "северной кореи",
+            "северная корея",
+            "северную корею",
+            "северокорей",
+            "корейск",
+            "пхеньян",
+            "ким чен",
+            "чо сон"
+          ]
+        },
+        "_aihot": {
+          "initialBackfillLimit": 15
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 45,
+      "tags": [
+        "러시아국영",
+        "러북협력"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-ria-novosti",
+      "name": "리아 노보스티 (РИА Новости · 러북/한반도 선별)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://ria.ru/export/rss2/archive/index.xml",
+        "ingestNoiseFilter": {
+          "requireMarkers": [
+            "кндр",
+            "северной кореи",
+            "северная корея",
+            "северную корею",
+            "северокорей",
+            "корейск",
+            "пхеньян",
+            "ким чен",
+            "чо сон"
+          ]
+        },
+        "_aihot": {
+          "initialBackfillLimit": 15
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 45,
+      "tags": [
+        "러시아국영",
+        "러국방부"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-kommersant",
+      "name": "코메르산트 (Коммерсантъ · 러북/한반도 선별)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.kommersant.ru/RSS/news.xml",
+        "ingestNoiseFilter": {
+          "requireMarkers": [
+            "кндр",
+            "северной кореи",
+            "северная корея",
+            "северную корею",
+            "северокорей",
+            "корейск",
+            "пхеньян",
+            "ким чен",
+            "чо сон"
+          ]
+        },
+        "_aihot": {
+          "initialBackfillLimit": 15
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 60,
+      "tags": [
+        "러시아언론",
+        "크렘린"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-vedomosti-politics",
+      "name": "베도모스티 (Ведомости · 러북/한반도 선별)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.vedomosti.ru/rss/rubric/politics",
+        "ingestNoiseFilter": {
+          "requireMarkers": [
+            "кндр",
+            "северной кореи",
+            "северная корея",
+            "северную корею",
+            "северокорей",
+            "корейск",
+            "пхеньян",
+            "ким чен",
+            "чо сон"
+          ]
+        },
+        "_aihot": {
+          "initialBackfillLimit": 15
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 60,
+      "tags": [
+        "러시아언론",
+        "방산외교"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-moscow-times",
+      "name": "The Moscow Times (북한·러북 선별)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.themoscowtimes.com/rss/news",
+        "ingestNoiseFilter": {
+          "requireMarkers": [
+            "north korea",
+            "dprk",
+            "pyongyang",
+            "kim jong",
+            "korean"
+          ]
+        },
+        "_aihot": {
+          "initialBackfillLimit": 10
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 60,
+      "tags": [
+        "러시아독립매체",
+        "북한군파병"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-nhk-world-ja",
+      "name": "NHK 뉴스 · 국제/안보 (북한·한반도 선별)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www3.nhk.or.jp/rss/news/cat6.xml",
+        "ingestNoiseFilter": {
+          "requireMarkers": [
+            "北朝鮮",
+            "朝鮮半島",
+            "平壌",
+            "金正恩",
+            "ミサイル",
+            "弾道",
+            "拉致",
+            "核実験",
+            "日朝",
+            "米朝",
+            "韓"
+          ]
+        },
+        "_aihot": {
+          "initialBackfillLimit": 15
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 30,
+      "tags": [
+        "일본공영",
+        "미사일경보"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-japan-times",
+      "name": "The Japan Times (북한·한반도 선별)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.japantimes.co.jp/feed/",
+        "ingestNoiseFilter": {
+          "requireMarkers": [
+            "north korea",
+            "dprk",
+            "pyongyang",
+            "kim jong",
+            "korean peninsula",
+            "abduct"
+          ]
+        },
+        "_aihot": {
+          "initialBackfillLimit": 10
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 60,
+      "tags": [
+        "일본언론",
+        "미일동맹"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-chinanews-world",
+      "name": "중국신문망 국제 (북중·한반도 선별)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.chinanews.com.cn/rss/world.xml",
+        "ingestNoiseFilter": {
+          "requireMarkers": [
+            "朝鲜",
+            "朝俄",
+            "中朝",
+            "平壤",
+            "金正恩",
+            "半岛",
+            "朝韩"
+          ]
+        },
+        "_aihot": {
+          "initialBackfillLimit": 15
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 60,
+      "tags": [
+        "중국통신사",
+        "한반도"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-scmp-asia",
+      "name": "SCMP · Asia (북한·한반도 선별)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.scmp.com/rss/3/feed",
+        "ingestNoiseFilter": {
+          "requireMarkers": [
+            "north korea",
+            "dprk",
+            "pyongyang",
+            "kim jong",
+            "korean peninsula"
+          ]
+        },
+        "_aihot": {
+          "initialBackfillLimit": 15
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 60,
+      "tags": [
+        "중화권외신",
+        "북중동향"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-us-dod-news",
+      "name": "미 국방부 (DoD) · Defense News (한반도·확장억제 선별)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?ContentType=1&Site=945&max=10",
+        "ingestNoiseFilter": {
+          "requireMarkers": [
+            "korea",
+            "dprk",
+            "pyongyang",
+            "kim jong",
+            "indo-pacific",
+            "icbm",
+            "lazarus",
+            "kimsuky",
+            "andariel"
+          ]
+        },
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T1",
+      "owner_entity_id": "us-dod",
+      "participation_mode": "editorial",
+      "interval_minutes": 60,
+      "tags": [
+        "공식",
+        "DoD"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-us-dod-releases",
+      "name": "미 국방부 (DoD) · 공식 성명 (한반도·확장억제 선별)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?ContentType=9&Site=945&max=10",
+        "ingestNoiseFilter": {
+          "requireMarkers": [
+            "korea",
+            "dprk",
+            "pyongyang",
+            "kim jong",
+            "indo-pacific",
+            "icbm",
+            "lazarus",
+            "kimsuky",
+            "andariel"
+          ]
+        },
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T1",
+      "owner_entity_id": "us-dod",
+      "participation_mode": "editorial",
+      "interval_minutes": 60,
+      "tags": [
+        "공식",
+        "DoD"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-un-peace-security",
+      "name": "유엔 뉴스 (UN News) · 한반도/대북제재 선별",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://news.un.org/feed/subscribe/en/news/topic/peace-and-security/feed/rss.xml",
+        "ingestNoiseFilter": {
+          "requireMarkers": [
+            "korea",
+            "dprk",
+            "pyongyang",
+            "kim jong",
+            "indo-pacific",
+            "icbm",
+            "lazarus",
+            "kimsuky",
+            "andariel"
+          ]
+        },
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T1",
+      "owner_entity_id": "un",
+      "participation_mode": "editorial",
+      "interval_minutes": 90,
+      "tags": [
+        "공식",
+        "UN"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-iaea-topnews",
+      "name": "국제원자력기구 (IAEA · 북핵 사찰 선별)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.iaea.org/feeds/topnews",
+        "ingestNoiseFilter": {
+          "requireMarkers": [
+            "korea",
+            "dprk",
+            "pyongyang",
+            "kim jong",
+            "indo-pacific",
+            "icbm",
+            "lazarus",
+            "kimsuky",
+            "andariel"
+          ]
+        },
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T1",
+      "owner_entity_id": "un",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "공식",
+        "핵사찰"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "rss-therecord-cti",
+      "name": "The Record (국가배후 APT/라자루스·김수키 선별)",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://therecord.media/feed",
+        "ingestNoiseFilter": {
+          "requireMarkers": [
+            "korea",
+            "dprk",
+            "pyongyang",
+            "kim jong",
+            "indo-pacific",
+            "icbm",
+            "lazarus",
+            "kimsuky",
+            "andariel"
+          ]
+        },
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 60,
+      "tags": [
+        "사이버위협",
+        "APT/라자루스"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    }
+  ]
+}

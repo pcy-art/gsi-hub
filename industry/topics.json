@@ -1,0 +1,318 @@
+{
+  "groups": [
+    {
+      "key": "company",
+      "name": "주요 주체 및 기구",
+      "blurb": "핵심 국가·군 당국 및 국제 안보 기구별 공식 발표와 동향 추적"
+    },
+    {
+      "key": "field",
+      "name": "전구 및 전략 현안",
+      "blurb": "한반도·동북아 분쟁 해역, 핵심 동맹, 하이브리드 위협 등 안보 현안 심층 감시"
+    },
+    {
+      "key": "genre",
+      "name": "위협 및 사건 유형",
+      "blurb": "미사일 도발, 해양 충돌, 제재 결의, 사이버 공작, 싱크탱크 정세 평가 등 유형별 분류"
+    }
+  ],
+  "topics": [
+    {
+      "slug": "dprk",
+      "name": "북한 / 조선인민군",
+      "group": "company",
+      "entityId": "dprk",
+      "aliases": [
+        "DPRK",
+        "KCNA",
+        "노동신문"
+      ],
+      "definition": "북한의 탄도·순항미사일 발사, 핵시설 가동, 대러 군사 파병·무기 이전 및 관영매체(KCNA·노동신문) 공식 발표 동향."
+    },
+    {
+      "slug": "jcs-korea",
+      "name": "합동참모본부 (합참)",
+      "group": "company",
+      "entityId": "jcs-korea",
+      "aliases": [
+        "합참",
+        "JCS"
+      ],
+      "definition": "대한민국 합동참모본부의 대북 미사일 탐지·추적 브리핑, NLL 및 영공 방어 작전, 군사 대비태세 공식 발표."
+    },
+    {
+      "slug": "mod-korea",
+      "name": "대한민국 국방부",
+      "group": "company",
+      "entityId": "mod-korea",
+      "aliases": [
+        "국방부",
+        "MND"
+      ],
+      "definition": "대한민국 국방부의 국방 정책, 한미 안보협의회의(SCM), 한국형 3축 체계 전력화 및 방위산업 협력 동향."
+    },
+    {
+      "slug": "usfk",
+      "name": "주한미군 (USFK)",
+      "group": "company",
+      "entityId": "usfk",
+      "aliases": [
+        "USFK",
+        "한미연합사"
+      ],
+      "definition": "주한미군 및 한미연합군사령부의 연합 연습(UFS 등), 미 전략자산 한반도 전개 및 연합 방위태세 동향."
+    },
+    {
+      "slug": "us-dod",
+      "name": "미 국방부 (DoD)",
+      "group": "company",
+      "entityId": "us-dod",
+      "aliases": [
+        "DoD",
+        "Pentagon",
+        "펜타곤"
+      ],
+      "definition": "미국 국방부(펜타곤)의 인도-태평양 안보 전략, 확장억제 공약, 글로벌 전력 배치 및 대외 군사지원 발표."
+    },
+    {
+      "slug": "japan-mod",
+      "name": "일본 방위성",
+      "group": "company",
+      "entityId": "japan-mod",
+      "aliases": [
+        "방위성",
+        "통합막료감부"
+      ],
+      "definition": "일본 방위성 및 통합막료감부의 북한 미사일 궤적 분석, 동중국해·센카쿠 주변 중·러 군용기 및 함정 감시 브리핑."
+    },
+    {
+      "slug": "prc-pla",
+      "name": "중국 국방부 / 인민해방군 (PLA)",
+      "group": "company",
+      "entityId": "prc-pla",
+      "aliases": [
+        "인민해방군",
+        "PLA",
+        "중국 외교부",
+        "중국 해경"
+      ],
+      "definition": "중국 국방부·외교부 및 인민해방군(PLA)·해경의 한반도 및 북·중 외교 입장, 대만해협·남중국해·서해 해상 작전 동향."
+    },
+    {
+      "slug": "russia-mod",
+      "name": "러시아 국방부 / 크렘린",
+      "group": "company",
+      "entityId": "russia-mod",
+      "aliases": [
+        "크렘린",
+        "러 국방부"
+      ],
+      "definition": "러시아 국방부 및 크렘린궁의 우크라이나 전선 브리핑, 북·러 군사 기술 협력 및 극동 군사 훈련 동향."
+    },
+    {
+      "slug": "iran-irgc",
+      "name": "이란 / 혁명수비대 (IRGC)",
+      "group": "company",
+      "entityId": "iran-irgc",
+      "aliases": [
+        "IRGC",
+        "혁명수비대",
+        "이란 국방부"
+      ],
+      "definition": "이란 국방부 및 이슬람혁명수비대(IRGC)의 탄도미사일·드론 전력, 호르무즈 해협 작전, 핵시설 가동 및 북한·러시아 군사 커넥션 동향."
+    },
+    {
+      "slug": "un",
+      "name": "유엔 (UN / 안보리)",
+      "group": "company",
+      "entityId": "un",
+      "aliases": [
+        "UN",
+        "유엔 안보리",
+        "IAEA"
+      ],
+      "definition": "유엔 안전보장이사회의 대북·대러 제재 결의, 다국적 제재 모니터링 팀(MSMT) 활동 및 국제원자력기구(IAEA) 핵 사찰 동향."
+    },
+    {
+      "slug": "nato",
+      "name": "NATO (북대서양조약기구)",
+      "group": "company",
+      "entityId": "nato",
+      "aliases": [
+        "나토",
+        "NATO-IP4"
+      ],
+      "definition": "NATO의 유럽 집단방위 태세, 우크라이나 군사 지원, 인도-태평양 파트너 4개국(IP4: 한·일·호·뉴) 안보 협력 동향."
+    },
+    {
+      "slug": "dprk-threat",
+      "name": "대북 군사 위협",
+      "group": "field",
+      "tags": [
+        "대북 위협"
+      ],
+      "definition": "북한의 핵·미사일 고도화, 전술핵 운용 부대 훈련, 오물풍선·무인기 침투 등 대남·대미 복합 도발 위협."
+    },
+    {
+      "slug": "rok-us-alliance",
+      "name": "한미동맹·한미일 협력",
+      "group": "field",
+      "tags": [
+        "한미동맹",
+        "캠프 데이비드"
+      ],
+      "definition": "한미 핵협의그룹(NCG) 확장억제 실행력 강화, 캠프 데이비드 합의 기반 한미일 3국 실시간 미사일 경보 공유 및 다영역 훈련."
+    },
+    {
+      "slug": "ru-kp-cooperation",
+      "name": "러·북 군사밀착",
+      "group": "field",
+      "tags": [
+        "러·북 군사협력"
+      ],
+      "definition": "북·러 포괄적 전략적 동반자 조약, 북한군 우크라이나 전선 파병, 나진항을 통한 대러 포탄·미사일 수출 및 군사기술 이전."
+    },
+    {
+      "slug": "taiwan-scs",
+      "name": "대만해협·남중국해",
+      "group": "field",
+      "tags": [
+        "대만해협",
+        "남중국해"
+      ],
+      "definition": "중국군의 대만 포위 합동훈련, 남중국해 영유권 분쟁(물대포·충돌) 및 미 해군 항행의 자유 작전(FONOP)."
+    },
+    {
+      "slug": "sloc-maritime",
+      "name": "해상교통로 (SLOC)",
+      "group": "field",
+      "tags": [
+        "SLOC/해상교통로",
+        "후티 반군"
+      ],
+      "definition": "홍해·바브엘만데브·호르무즈·말라카 해협 등 글로벌 에너지·물류 핵심 해상교통로 위협 및 다국적 호위 작전."
+    },
+    {
+      "slug": "ukraine-front",
+      "name": "러-우크라이나 전쟁",
+      "group": "field",
+      "tags": [
+        "우크라이나 전선"
+      ],
+      "definition": "우크라이나 전선 교전 상황, 장거리 드론·미사일 공습, 서방 무기 지원 및 휴전·종전 협상 정세."
+    },
+    {
+      "slug": "middle-east",
+      "name": "중동 무력 분쟁",
+      "group": "field",
+      "tags": [
+        "중동 분쟁",
+        "하마스·헤즈볼라"
+      ],
+      "definition": "이스라엘-이란 및 저항의 축(하마스·헤즈볼라·후티) 간 무력 충돌과 북한제 무기 유입 커넥션."
+    },
+    {
+      "slug": "multilateral-security",
+      "name": "다자 안보 (NATO·QUAD·AUKUS)",
+      "group": "field",
+      "tags": [
+        "NATO-IP4",
+        "QUAD",
+        "AUKUS"
+      ],
+      "definition": "인도-태평양 및 대서양을 잇는 다자 안보 협의체(NATO-IP4, QUAD, AUKUS)의 전략 공조 및 연합 전력 구축."
+    },
+    {
+      "slug": "lazarus-apt",
+      "name": "대북 사이버 공작 (라자루스)",
+      "group": "field",
+      "tags": [
+        "라자루스"
+      ],
+      "definition": "라자루스·김수키·안다리엘 등 북한 정찰총국 산하 해킹 조직의 방산 기밀 탈취 및 글로벌 가상자산 세탁 추적."
+    },
+    {
+      "slug": "supply-chain-defense",
+      "name": "경제안보·방위산업",
+      "group": "field",
+      "tags": [
+        "반도체/희토류 공급망",
+        "방위산업"
+      ],
+      "definition": "반도체·희토류 핵심 광물 수출 통제, 전략 공급망 재편 및 K-방산 등 글로벌 방위산업 무기 수출·기술 협력."
+    },
+    {
+      "slug": "missile-provocation",
+      "name": "미사일·무력 도발",
+      "group": "genre",
+      "tags": [
+        "미사일 도발",
+        "국경/무력 충돌"
+      ],
+      "definition": "탄도·순항·극초음속 미사일 시험발사, 초대형 방사포 사격 및 접경지역 무력 충돌 속보."
+    },
+    {
+      "slug": "nuclear-wmd",
+      "name": "핵·WMD 동향",
+      "group": "genre",
+      "tags": [
+        "핵·WMD 동향"
+      ],
+      "definition": "풍계리 핵실험장 갱도, 영변·강선 우라늄 농축 시설 가동 징후 및 전술핵 탄두 소형화 동향."
+    },
+    {
+      "slug": "military-exercise",
+      "name": "군사 훈련·무기 이전",
+      "group": "genre",
+      "tags": [
+        "군사 훈련/배치",
+        "무기 수출/이전"
+      ],
+      "definition": "대규모 연합 야외기동훈련, 전략폭격기·핵추진항모 전개 및 국가 간 전략 무기 수출·이전."
+    },
+    {
+      "slug": "maritime-darkship",
+      "name": "해양 충돌·다크쉽 감시",
+      "group": "genre",
+      "tags": [
+        "해양 도발/충돌",
+        "항행의 자유/봉쇄",
+        "다크쉽/제재 회피",
+        "해저 인프라"
+      ],
+      "definition": "NLL 침범, 공해상 불법 환적(STS) 다크쉽 항적 감시, 해상 봉쇄 및 해저 케이블·파이프라인 사보타주."
+    },
+    {
+      "slug": "diplomacy-sanctions",
+      "name": "정상외교·대북/대러 제재",
+      "group": "genre",
+      "tags": [
+        "정상회담/동맹",
+        "안보리/제재 결의"
+      ],
+      "definition": "안보 정상회담, 외교·국방(2+2) 장관회의 성명 및 유엔·독자 대북/대러 금융·해운 제재 조치."
+    },
+    {
+      "slug": "cyber-space-ew",
+      "name": "사이버·우주·전자전",
+      "group": "genre",
+      "tags": [
+        "사이버 공격/APT",
+        "가상자산 탈취",
+        "우주/정찰위성",
+        "전자전/GPS 교란"
+      ],
+      "definition": "국가 배후 사이버 공격, 군사정찰위성 발사, 위성 요격(ASAT) 및 서해·수도권 GPS 전파 교란."
+    },
+    {
+      "slug": "strategic-assessment",
+      "name": "싱크탱크 정세 평가",
+      "group": "genre",
+      "tags": [
+        "전문가 정세 평가",
+        "공급망/광물 통제"
+      ],
+      "definition": "CSIS, 38 North, ISW, RAND, KIDA 등 국내외 권위 안보 싱크탱크의 위성사진 판독 보고서 및 심층 전략 분석."
+    }
+  ]
+}

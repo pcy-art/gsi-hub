@@ -1,0 +1,29 @@
+name: 기능 제안 / Feature request
+description: 명확한 사용 시나리오가 있는 새로운 기능이나 개선 사항을 제안합니다.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        아직 구체화되지 않은 아이디어는 [아이디어 토론장](https://github.com/KKKKhazix/AIHOT/discussions/categories/ideas)에서 먼저 논의해 주세요.
+        이 저장소는 전체 운영 정보원 목록을 제공하지 않으며 특정 폐쇄 플랫폼 전용 크롤러는 유지보수하지 않습니다. [정보원 가이드](https://github.com/KKKKhazix/AIHOT/blob/main/docs/sources.md)의 외부 푸시 API를 참고해 연동할 수 있습니다.
+        특정 사이트에만 필요한 독자 기능은 자체 저장소의 `modules/`에 모듈로 구현할 수 있습니다([아키텍처 문서](https://github.com/KKKKhazix/AIHOT/blob/main/docs/architecture.md#모듈) 참조).
+  - type: textarea
+    id: problem
+    attributes:
+      label: 사용 시나리오 및 해결하려는 문제
+      description: 누가 어떤 상황에서 이 기능이 필요한가요? 현재 어떤 점이 불편한가요?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 희망하는 개선 방향
+      description: 기대하는 동작 방식이나 결과를 구체적인 예시와 함께 설명해 주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 시도해 본 대안 (선택)
+      description: 기존 설정, 스크립트 또는 모듈 방식으로 요구사항을 충족하기 어려웠던 이유는 무엇인가요?

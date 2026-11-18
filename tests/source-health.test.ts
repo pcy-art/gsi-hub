@@ -1,0 +1,447 @@
+// Failure cases: fresh hot signals hide an editorial collection outage; intermittent failures vanish
+// after one success; zero-output counts stop at the display limit; publisher attribution makes a
+// working discovery source look idle; missing dates/repeated edits in signals are called bad articles;
+// a quiet weekend hour with every fetch succeeding is called a collection stall.
+// And the quiet judgment reads each source's own rhythm: a monthly blog is not late after a week, a
+// daily one is, and a source with too little history stays visible rather than being called healthy.
+// The daily follow-ups list one source and one problem per line, so each closes on its own; a quiet
+// source is nothing anyone can fix (slow, or too new to judge) and is left to the weekly report.
+// Detail pages fail the way runs do: a timeout in a few hundred reads is nobody's to fix, a page that
+// keeps failing is, so the follow-up waits for repeated failures that are a real share of the reads.
+import { tag } from "./setup.ts";
+import assert from "node:assert/strict";
+import { after, before, test } from "node:test";
+import { closeDb, sql } from "@aihot/backend/db";
+import { fillScheduledPublications, upsertMaterial } from "@aihot/backend/content/materials";
+import { getBoss, stopBoss } from "@aihot/backend/jobs/queue";
+import { collectFindings, dismissedFollowUps, dismissFollowUp, restoreFollowUp, sendDigest } from "@aihot/backend/operations/alerts";
+import { sourceHealthWeekly } from "@aihot/backend/operations/reports";
+import { sourceHealth, RHYTHM_WINDOW_DAYS } from "@aihot/backend/sources/health";
+import { defineServerModule, installModules } from "@aihot/backend/modules";
+import { ALERTS } from "@aihot/site";
+
+installModules([defineServerModule({ name: "watcher", sourceUses: { watch: { label: "주시" } } })]);
+
+const T = tag();
+const now = Date.now();
+const old = new Date(now - 8 * 86400_000);
+process.env.COLLECT_ENABLED = "true";
+process.env.MODEL_CALLS_ENABLED = "false";
+process.env.FEISHU_INTERNAL_ENABLED = "false";
+before(async () => { await getBoss(); });
+after(async () => { await stopBoss(); await closeDb(); });
+async function source(id: string, mode = "editorial", created = old) {
+  id = `${T}-${id}`;
+  await sql`INSERT INTO sources(id,name,kind,participation_mode,health,created_at,last_ok_at,next_fetch_at)
+    VALUES(${id},${id},'rss',${mode},'ok',${created},${new Date(now)},'2100-01-01')`;
+  return id;
+}
+async function material(sourceId: string, suffix: string, publishedAt: Date | null = new Date(now)) {
+  return upsertMaterial({ sourceId, title: suffix, url: `https://example.test/${T}/${suffix}`, via: "fetch", publishedAt, bodyStatus: "none" });
+}
+/** Items this source's own output is dated to, on the given days before now (old enough not to count as
+ * fresh discoveries): the only thing its rhythm is read from. */
+async function datedItems(sourceId: string, daysAgo: number[]) {
+  for (const [i, days] of daysAgo.entries()) {
+    const at = new Date(now - days * 86400_000);
+    const url = `https://example.test/${sourceId}/${i}`;
+    await sql`INSERT INTO articles(id,source_id,identity_key,url,title,published_at,discovered_at,timeline_at)
+      VALUES(${`${sourceId}-d${i}`},${sourceId},${`url:${url}`},${url},${`${sourceId} ${i}`},${at},${new Date(now - 30 * 86400_000)},${at})`;
+  }
+}
+async function failedRuns(sourceId: string, times: number, error = "HTTP 503") {
+  await sql`INSERT INTO fetch_runs(source_id,started_at,finished_at,status,found_count,new_count,error)
+    SELECT ${sourceId}, ${new Date(now)}::timestamptz - i * interval '1 hour', ${new Date(now)}::timestamptz - i * interval '1 hour',
+      'failed', 1, 0, ${error} FROM generate_series(1,${times}) i`;
+}
+/** One run's detail-page reads, as the collector records them. */
+async function detailRun(sourceId: string, attempts: number, failures: number) {
+  await sql`INSERT INTO fetch_runs(source_id,started_at,finished_at,status,found_count,new_count,detail)
+    VALUES(${sourceId},${new Date(now - 3600_000)},${new Date(now - 3600_000)},'ok',1,0,
+      ${sql.json({ detailAttempts: attempts, detailFailures: failures })})`;
+}
+/** A first import: history that arrived in one delivery, so its publication dates reach further back
+ * than the day the source started producing anything we could see. */
+async function firstImport(sourceId: string, publishedDaysAgo: number[], discoveredDaysAgo: number) {
+  for (const [i, days] of publishedDaysAgo.entries()) {
+    const at = new Date(now - days * 86400_000);
+    const url = `https://example.test/${sourceId}/import-${i}`;
+    await sql`INSERT INTO articles(id,source_id,identity_key,url,title,published_at,discovered_at,timeline_at,backfill,backfill_reason)
+      VALUES(${`${sourceId}-i${i}`},${sourceId},${`url:${url}`},${url},${`${sourceId} import ${i}`},${at},
+        ${new Date(now - discoveredDaysAgo * 86400_000)},${at},true,'first-import')`;
+  }
+}
+const quietGroup = async (mode = "editorial") => (await sourceHealth(now)).find(g => g.mode === mode)!;
+/** The daily follow-ups that name this source. */
+const followUps = async (sourceId: string) => (await collectFindings(now)).filter(f => f.level === "later" && f.key.endsWith(`.${sourceId}`));
+/** The weekly report's lines, as sent. */
+async function weekly() {
+  const lines: string[] = [];
+  const log = console.log;
+  console.log = (value: unknown) => { if (String(value).includes("주간 정보원 리포트")) lines.push(...JSON.parse(String(value)).lines); };
+  try { await sourceHealthWeekly(now); } finally { console.log = log; }
+  return lines.join("\n");
+}
+
+test("hot-signal activity does not hide editorial collection stopping", async () => {
+  const editorial = await source("editorial", "editorial", new Date(now));
+  const signal = await source("signal", "hot_signal", new Date(now));
+  await material(signal, "signal");
+  const finding = (await collectFindings(now)).find(f => f.key === "content.collect");
+  assert.equal(finding?.level, "now");
+  assert.match(finding!.title, /기사|수집/);
+  await material(editorial, "editorial");
+  assert.equal((await collectFindings(now)).find(f => f.key === "content.collect"), undefined);
+});
+
+// 10-19..11-01: 21 "반복 수집 실패" follow-ups were timeouts, dropped TLS and the origin's 404/406/502,
+// healing by the next run, all closed as accepted; the ones worth fixing were our parsing coming back empty.
+async function runs(sourceId: string, ok: number, failed: number, error: string) {
+  await sql`INSERT INTO fetch_runs(source_id,started_at,finished_at,status,error)
+    SELECT ${sourceId}, ${new Date(now)}::timestamptz - i * interval '1 hour', ${new Date(now)}::timestamptz - i * interval '1 hour',
+      CASE WHEN i <= ${failed} THEN 'failed' ELSE 'ok' END, CASE WHEN i <= ${failed} THEN ${error} END
+    FROM generate_series(1,${ok + failed}) i`;
+}
+test("intermittent network and origin errors do not make a source unstable; parsing that comes back empty does", async () => {
+  const unstable = async (id: string) => (await collectFindings(now)).some(f => f.key === `sources.unstable.${id}`);
+  for (const [name, error] of [["timeout", "The operation was aborted due to timeout"], ["tls", "Client network socket disconnected before secure TLS connection was established"],
+    ["fetch", "TypeError: fetch failed"], ["origin", "HTTP 404"], ["dns", "DNS lookup failed for example.test"], ["jina", "jina HTTP 503: upstream connect error"]] as const) {
+    const id = await source(`flaky-${name}`, "editorial", new Date(now));
+    await runs(id, 80, 20, error);
+    assert.equal(await unstable(id), false, error);
+  }
+  const parse = await source("flaky-parse", "editorial", new Date(now));
+  await runs(parse, 44, 6, "no items matched (html)");
+  assert.equal(await unstable(parse), true);
+});
+
+// 11-01 (Sunday) 12:18–13:51: 775 editorial fetches ok, nothing new; told to the owner as a third stall that day.
+test("a quiet spell while editorial fetches keep succeeding is not a stall", async () => {
+  const quiet = await source("quiet-sunday", "editorial", new Date(now));
+  const collect = async (at: number) => (await collectFindings(at)).find(f => f.key === "content.collect");
+  await material(quiet, "quiet");
+  const ok = (at: number) => sql`INSERT INTO fetch_runs(source_id,started_at,finished_at,status,found_count,new_count)
+    VALUES(${quiet},${new Date(at)},${new Date(at)},'ok',20,0)`;
+  const { quietMinutes, quietWhileFetchingMinutes } = ALERTS;
+  await ok(now + (quietMinutes + 30) * 60_000);
+  assert.equal(await collect(now + (quietMinutes + 35) * 60_000), undefined, "fetches ok, past the quiet limit without a new article");
+  assert.equal((await collect(now + (2 * quietMinutes + 32) * 60_000))?.level, "now", "no editorial fetch has succeeded within the quiet limit");
+  await ok(now + (quietWhileFetchingMinutes + 59) * 60_000);
+  assert.equal((await collect(now + (quietWhileFetchingMinutes + 60) * 60_000))?.level, "now", "fetches ok, but past the longer limit without anything new");
+});
+
+test("daily follow-ups retain chronic failures after a successful run, separately by use", async () => {
+  const editorial = await source("chronic");
+  const signal = await source("signal-intermittent", "hot_signal");
+  const budget = await source("budget-limited", "editorial", new Date(now));
+  await sql`INSERT INTO fetch_runs(source_id,started_at,finished_at,status,error)
+    SELECT ${budget},${new Date(now)},${new Date(now)},'failed','Budget for test exhausted (day)' FROM generate_series(1,20)`;
+  for (const id of [editorial, signal]) {
+    await sql`INSERT INTO fetch_runs(source_id,started_at,finished_at,status,found_count,new_count,error)
+      SELECT ${id}, ${new Date(now)}::timestamptz - i * interval '1 hour', ${new Date(now)}::timestamptz - i * interval '1 hour',
+        CASE WHEN i BETWEEN 1 AND 5 THEN 'failed' ELSE 'ok' END, 1, 0,
+        CASE WHEN i BETWEEN 1 AND 5 THEN 'no items matched (html)' ELSE NULL END FROM generate_series(0,19) i`;
+  }
+  for (const [name, id] of [["편집 콘텐츠", editorial], ["화제성 신호", signal]]) {
+    const [f, ...more] = await followUps(id!);
+    assert.equal(more.length, 0);
+    assert.equal(f?.key, `sources.unstable.${id}`);
+    assert.ok(f!.title.startsWith(name!));
+    assert.ok(f!.title.includes(id!));
+    assert.match(f!.detail!, /5\/20/);
+  }
+  assert.deepEqual(await followUps(budget), [], "a spent budget is not a failing source");
+});
+
+test("each failing source is a follow-up of its own, closed when that source recovers", async () => {
+  const first = await source("failing-first", "editorial", new Date(now));
+  const second = await source("failing-second", "editorial", new Date(now));
+  for (const id of [first, second]) await sql`UPDATE sources SET health = 'failing', fail_count = 6, last_error = 'HTTP 403' WHERE id = ${id}`;
+  assert.deepEqual((await followUps(first)).map(f => f.key), [`sources.failing.${first}`]);
+  assert.match((await followUps(first))[0]!.detail!, /연속 6회 실패, HTTP 403/);
+  await sql`UPDATE sources SET health = 'ok', fail_count = 0, last_error = NULL WHERE id = ${first}`;
+  assert.deepEqual(await followUps(first), []);
+  assert.deepEqual((await followUps(second)).map(f => f.key), [`sources.failing.${second}`]);
+});
+
+test("the weekly report stays a few lines: quiet and problem sources are counted elsewhere, not listed", async () => {
+  for (let i = 0; i < 18; i++) await source(`silent-${i}`);
+  const publisher = await source("publisher", "editorial", new Date(now));
+  const collector = await source("collector");
+  const { articleId } = await material(publisher, "shared");
+  await sql`INSERT INTO article_discoveries(article_id,source_id,via,discovered_at) VALUES(${articleId},${collector},'fetch',${new Date(now)})`;
+  const group = await quietGroup();
+  const quiet = [...group.overdue, ...group.unknown].map(s => s.id);
+  assert.ok(quiet.includes(`${T}-silent-17`), "every quiet source is still there for the patrol");
+  assert.ok(!quiet.includes(collector), "a collector with attributed discoveries is not quiet");
+  const text = await weekly();
+  assert.match(text, /금주 수집 /);
+  assert.match(text, /활성 정보원 \d+개/);
+  assert.doesNotMatch(text, /silent-|신규 콘텐츠 없음|조치 불필요 처리됨|AI에게 전달/);
+  assert.ok(text.length < 400, text);
+});
+
+// Undated articles and repeated revisions are different problems: one closed as accepted (dates missing by
+// rule) must not hide the other arriving later (10-19 review of the ongoing closure).
+test("undated editorial articles and repeated edits are follow-ups of their own, signal bodies are not judged", async () => {
+  const editorial = await source("quality", "editorial", new Date(now));
+  const signal = await source("quality-signal", "hot_signal", new Date(now));
+  const article = await material(editorial, "undated-editorial", null);
+  await material(signal, "undated-signal", null);
+  await dismissFollowUp(`sources.undated.${editorial}`, "원문 페이지 자체에 발행 시간이 없음", "test", now, "ongoing");
+  await sql`INSERT INTO article_revisions(article_id,revision,title,created_at)
+    SELECT ${article.articleId},i,'changed',${new Date(now)} FROM generate_series(2,6) i`;
+  const found = await followUps(editorial);
+  assert.deepEqual(found.map(f => f.key).sort(), [`sources.revisions.${editorial}`, `sources.undated.${editorial}`]);
+  assert.match(found.find(f => f.key.startsWith("sources.undated"))!.detail!, /발행 일시 누락 1건/);
+  assert.match(found.find(f => f.key.startsWith("sources.revisions"))!.detail!, /반복 수정 1건/);
+  const closed = await dismissedFollowUps(found, now);
+  assert.ok(closed[`sources.undated.${editorial}`]);
+  assert.equal(closed[`sources.revisions.${editorial}`], undefined, "repeated edits are not hidden by the closure of missing dates");
+  assert.deepEqual(await followUps(signal), []);
+});
+
+test("detail pages that keep failing are a follow-up, an occasional timeout among hundreds of reads is not", async () => {
+  // Shapes from production, 2026-10: one timeout in 545 reads; 26 in 1,309 while a page was not online yet;
+  // 6 of 34 pages refused every time.
+  const once = await source("detail-once", "hot_signal", new Date(now));
+  const rare = await source("detail-rare", "editorial", new Date(now));
+  const refused = await source("detail-refused", "editorial", new Date(now));
+  await detailRun(once, 545, 1);
+  await detailRun(rare, 1309, 26);
+  await detailRun(refused, 28, 0);
+  await detailRun(refused, 6, 6);
+  assert.deepEqual(await followUps(once), [], "one failure is not a follow-up");
+  assert.deepEqual(await followUps(rare), [], "many failures that are a small share of the reads are not either");
+  const [f, ...more] = await followUps(refused);
+  assert.equal(more.length, 0);
+  assert.equal(f?.key, `sources.details.${refused}`);
+  assert.match(f!.detail!, /최근 7일간 6\/34페이지 실패/);
+});
+
+test("a low-frequency source quiet for a week is not late, while a daily one is", async () => {
+  const monthly = await source("monthly");
+  const daily = await source("daily");
+  // One item a month, the newest ten days ago: quiet, but inside its own rhythm.
+  await datedItems(monthly, [10, 40, 70, 89]);
+  // One a day until a week ago: the same silence is seven times its own gap.
+  await datedItems(daily, [7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+  const group = await quietGroup();
+  assert.ok(!group.overdue.some(s => s.id === monthly), "a monthly blog is not overdue after ten days");
+  assert.ok(!group.unknown.some(s => s.id === monthly), "and it is not reported at all");
+  assert.ok(group.overdue.some(s => s.id === daily), "a daily source quiet for a week is overdue");
+  assert.deepEqual(await followUps(daily), [], "being late is not a daily follow-up: it may never end by itself");
+});
+
+test("a source without enough history to have a rhythm stays visible instead of being called fine", async () => {
+  const thin = await source("thin");
+  const never = await source("never");
+  await datedItems(thin, [8, 38]);
+  const group = await quietGroup();
+  assert.ok(group.unknown.some(s => s.id === thin), "two dated days are not a rhythm");
+  assert.ok(group.unknown.some(s => s.id === never), "a source that never produced anything is visible too");
+  assert.ok(!group.overdue.some(s => s.id === thin || s.id === never));
+  assert.deepEqual([...await followUps(thin), ...await followUps(never)], []);
+});
+
+// Which days count as output: a first import is the one day it arrived, only the rhythm window counts,
+// and a collector's attributed discoveries are its own output. Each case would read as a daily source
+// a week or more overdue if its rule were broken.
+test("one first import is one output day, not one day per publication date", async () => {
+  const imported = await source("import-batch");
+  await firstImport(imported, [8, 9, 10, 11], 8);
+  const group = await quietGroup();
+  assert.ok(!group.overdue.some(s => s.id === imported));
+  assert.ok(group.unknown.some(s => s.id === imported), "too little history to judge, still listed");
+});
+
+test("output older than the rhythm window is not comparable history", async () => {
+  const lapsed = await source("lapsed");
+  await datedItems(lapsed, [100, 101, 102, 103]);
+  const group = await quietGroup();
+  assert.ok(!group.overdue.some(s => s.id === lapsed));
+  assert.ok(group.unknown.some(s => s.id === lapsed));
+});
+
+// Candidate reads must cover the same whole days as the rhythm calculation, including posts listed
+// the day before publication and discoveries attributed to a collector instead of the publisher.
+test("the first rhythm day includes scheduled publications and attributed discoveries from early that day", async () => {
+  const [{ at }] = await sql<{ at: Date }[]>`SELECT date_trunc('day', ${new Date(now)}::timestamptz) + interval '12 hours' AS at`;
+  const [{ firstDay }] = await sql<{ firstDay: Date }[]>`SELECT date_trunc('day', ${at}::timestamptz) - ${RHYTHM_WINDOW_DAYS} * interval '1 day' AS "firstDay"`;
+  const scheduled = await source("window-scheduled");
+  const publisher = await source("window-publisher");
+  const collector = await source("window-collector");
+  for (const day of [0, 1, 2, 3]) {
+    const publishedAt = new Date(firstDay.getTime() + day * 86400_000);
+    const { articleId } = await upsertMaterial({ sourceId: scheduled, title: `scheduled ${day}`,
+      url: `https://example.test/${scheduled}/${day}`, via: "fetch", publishedAt,
+      discoveredAt: new Date(publishedAt.getTime() - 86400_000) });
+    assert.ok((await fillScheduledPublications(scheduled)).includes(articleId), "the actual publication rule accepts a post listed a day ahead");
+    const url = `https://example.test/${publisher}/${day}`;
+    await upsertMaterial({ sourceId: publisher, url, title: `published ${day}`, via: "fetch", publishedAt, discoveredAt: publishedAt });
+    await upsertMaterial({ sourceId: collector, url, title: `published ${day}`, via: "fetch", publishedAt, discoveredAt: publishedAt });
+  }
+  const group = (await sourceHealth(at.getTime())).find(g => g.mode === "editorial")!;
+  const ids = [scheduled, publisher, collector];
+  assert.deepEqual(ids.map(id => {
+    const row = [...group.overdue, ...group.unknown].find(s => s.id === id);
+    return { id, evidence: row?.evidence_days, gap: row?.median_gap_days, overdue: group.overdue.includes(row!) };
+  }), ids.map(id => ({ id, evidence: 4, gap: 1, overdue: true })), "all four output days count, including the first day");
+});
+
+test("an attributed discovery is the collector's output even without articles of its own", async () => {
+  const publisher = await source("history-publisher");
+  const collector = await source("history-collector");
+  await datedItems(publisher, [8, 9, 10, 11]);
+  for (const [i, days] of [8, 9, 10, 11].entries()) {
+    await sql`INSERT INTO article_discoveries(article_id,source_id,via,discovered_at)
+      VALUES(${`${publisher}-d${i}`},${collector},'fetch',${new Date(now - days * 86400_000)})`;
+  }
+  assert.ok((await quietGroup()).overdue.some(s => s.id === collector));
+});
+
+test("collection failures stay reported on their own, also when the source is past its rhythm", async () => {
+  const broken = await source("broken");
+  await datedItems(broken, [8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
+  await failedRuns(broken, 6);
+  await sql`UPDATE sources SET health = 'failing', fail_count = 6 WHERE id = ${broken}`;
+  const group = await quietGroup();
+  assert.ok(group.failing.some(s => s.id === broken), "consecutive failures keep their own follow-up");
+  assert.ok(!group.unstable.some(s => s.id === broken), "listed once, as failing, not also as failing often");
+  assert.ok(group.overdue.some(s => s.id === broken), "a failed source past its rhythm is not excused by its silence");
+  assert.deepEqual((await followUps(broken)).map(f => f.key), [`sources.failing.${broken}`]);
+});
+
+// Ways closing a source follow-up as "not to be fixed" goes wrong: it still shows in the digest; it is
+// accepted without a reason, or for a follow-up that bundles many records (it would also hide records that
+// arrive later) or for an alert; it leaves no audit trail or cannot be undone; it outlives the problem, so a
+// later recurrence is never shown again.
+test("a source follow-up closed as not to be fixed leaves the digest until it is restored or goes away", async () => {
+  const blocked = await source("blocked", "editorial", new Date(now));
+  const KEY = `sources.failing.${blocked}`;
+  const enabled = process.env.FEISHU_INTERNAL_ENABLED;
+  process.env.FEISHU_INTERNAL_ENABLED = "false";
+  const log = console.log;
+  const digest = async () => {
+    const lines: string[] = [];
+    console.log = (value: unknown) => { if (String(value).includes("일일 시스템 리포트")) lines.push(...JSON.parse(String(value)).lines); };
+    try { await sendDigest(now); } finally { console.log = log; }
+    return lines.join("\n");
+  };
+  const audits = () => sql<{ action: string; reason: string }[]>`SELECT action, reason FROM audit_log WHERE subject = ${`followup:${KEY}`} ORDER BY id`;
+  try {
+    await sql`UPDATE sources SET health = 'failing', fail_count = 9, last_error = 'HTTP 403' WHERE id = ${blocked}`;
+    assert.ok((await digest()).includes(blocked));
+
+    await assert.rejects(dismissFollowUp(KEY, " ", "test", now), /reason/);
+    await assert.rejects(dismissFollowUp(`sources.failing.${T}-missing`, "typo", "test", now), /follow-up/);
+    await sql`INSERT INTO receipts(logical_key,service,purpose,status) VALUES(${`bundle-${T}`},'deepseek','event_identity','unknown')`;
+    assert.ok((await collectFindings(now)).some(f => f.key === "receipts.unknown"));
+    await assert.rejects(dismissFollowUp("receipts.unknown", "covers later receipts too", "test", now), /source follow-up/);
+
+    await dismissFollowUp(KEY, "원본 사이트의 서버 IP 차단으로 타 정보원으로 대체", "test", now);
+    assert.ok(!(await digest()).includes(blocked));
+    assert.ok(!(await digest()).includes(blocked), "still closed the next day while the problem lasts");
+
+    assert.ok(await restoreFollowUp(KEY, "원본 사이트 접속 복구", "test"));
+    assert.ok((await digest()).includes(blocked));
+    assert.deepEqual((await audits()).map(a => [a.action, a.reason]),
+      [["followup.dismiss", "원본 사이트의 서버 IP 차단으로 타 정보원으로 대체"], ["followup.restore", "원본 사이트 접속 복구"]]);
+
+    // Closed again; the source then recovers and later fails again: the recurrence is listed.
+    await dismissFollowUp(KEY, "원본 사이트의 서버 IP 차단으로 타 정보원으로 대체", "test", now);
+    await sql`UPDATE sources SET health = 'ok', fail_count = 0, last_error = NULL WHERE id = ${blocked}`;
+    await digest();
+    assert.equal(await restoreFollowUp(KEY, "이미 만료됨", "test"), null, "the closure lapsed with the problem");
+    await sql`UPDATE sources SET health = 'failing', fail_count = 5, last_error = 'HTTP 403' WHERE id = ${blocked}`;
+    assert.ok((await digest()).includes(blocked));
+  } finally {
+    console.log = log;
+    await sql`UPDATE sources SET health = 'ok', fail_count = 0 WHERE id = ${blocked}`;
+    if (enabled === undefined) delete process.env.FEISHU_INTERNAL_ENABLED;
+    else process.env.FEISHU_INTERNAL_ENABLED = enabled;
+  }
+});
+
+// On 10-17 HN detail failures continued after a closure while old failures remained in the seven-day
+// window. The source and problem key stayed identical, so every new observation was hidden too.
+test("a source closure covers its observed history, not new failures under the same key", async () => {
+  const id=await source("new-failure-after-dismissal");
+  const key=`sources.details.${id}`;
+  await detailRun(id,20,10);
+  await dismissFollowUp(key,"fixed; old failures are waiting to leave the window","test",now);
+  assert.ok((await dismissedFollowUps())[key]);
+  await sql`INSERT INTO fetch_runs(source_id,started_at,finished_at,status,detail)
+    VALUES(${id},${new Date(now+60_000)},${new Date(now+61_000)},'ok',${sql.json({detailAttempts:10,detailFailures:2})})`;
+  assert.ok((await collectFindings(now+120_000)).some(f=>f.key===key));
+  assert.equal((await dismissedFollowUps())[key],undefined,"new detail failures reopen the same source/problem without waiting seven days");
+});
+
+// 10-19: closures judging a condition acceptable (YouTube RSS 404s a few times a day, one MIT article's
+// presentation mismatch recorded on every run, by-rule undated HN posts) reopened within hours, so the
+// digest listed and woke Codex for the same judged condition every day. Ways an accepted closure goes
+// wrong: the next failure of that same condition reopens it; it hides the condition forever, never judged
+// again; it hides a source that stops working altogether (a different problem).
+test("a closure accepting an ongoing condition holds through its new failures for a week, then it is judged again", async () => {
+  const id = await source("accepted-ongoing");
+  const key = `sources.details.${id}`;
+  await detailRun(id, 20, 10);
+  await dismissFollowUp(key, "원본 사이트 간헐적 타임아웃, 다음 수집 주기에서 복구됨", "test", now, "ongoing");
+  const failAt = async (at: number) => sql`INSERT INTO fetch_runs(source_id,started_at,finished_at,status,detail)
+    VALUES(${id},${new Date(at)},${new Date(at + 1000)},'ok',${sql.json({ detailAttempts: 10, detailFailures: 2 })})`;
+  const closed = async (at: number) => !!(await dismissedFollowUps(await collectFindings(at), at))[key];
+  await failAt(now + 60_000);
+  assert.ok(await closed(now + 120_000), "a new failure of the accepted condition does not reopen it");
+  await failAt(now + 6 * 86400_000);
+  assert.ok(await closed(now + 6 * 86400_000 + 60_000));
+  assert.equal(await closed(now + 7 * 86400_000 + 60_000), false, "after a week the condition is listed and judged again");
+
+  await sql`UPDATE sources SET health = 'failing', fail_count = 9, last_error = 'HTTP 403' WHERE id = ${id}`;
+  try {
+    const failing = (await collectFindings(now + 120_000)).map(f => f.key);
+    assert.ok(failing.includes(`sources.failing.${id}`), "a source that stops working is a separate follow-up");
+    assert.equal((await dismissedFollowUps(await collectFindings(now + 120_000), now + 120_000))[`sources.failing.${id}`], undefined);
+  } finally { await sql`UPDATE sources SET health = 'ok', fail_count = 0, last_error = NULL WHERE id = ${id}`; }
+});
+
+// 10-21 the noon patrol paused Claude's official YouTube over a flaky feed; the owner learned of it only at the
+// end of an unrelated message. The weekly report names what is still paused or was partly excluded this week.
+test("the weekly report names sources paused or partly excluded this week, with who and why", async () => {
+  const paused = await source("paused-by-agent");
+  const fenced = await source("fenced-in-admin");
+  const resumed = await source("paused-then-resumed");
+  await sql`UPDATE sources SET enabled = false, health = 'paused' WHERE id = ${paused}`;
+  const at = new Date(now - 2 * 86400_000);
+  const update = (id: string, actor: string, reason: string, before: object, after: object) =>
+    sql`INSERT INTO audit_log(actor,action,subject,reason,before,after,created_at) VALUES(${actor},'source.update',${`source:${id}`},${reason},${sql.json(before as never)},${sql.json(after as never)},${at})`;
+  await update(paused, "ops-script", "구독 피드 반복 404로 권한에 따라 일시 중지", { enabled: true }, { enabled: false });
+  await update(fenced, "admin:ou_test", "해당 원문 1건 404로 해당 URL만 제외", { config: { feedUrl: "x" } }, { config: { feedUrl: "x", denyUrlPrefixes: ["https://example.test/dead"] } });
+  // A second exclusion on the same source later that week is another line, not another source.
+  await update(fenced, "ops-script", "추가 원문 404 발생", { config: { feedUrl: "x", denyUrlPrefixes: ["https://example.test/dead"] } }, { config: { feedUrl: "x", denyUrlPrefixes: ["https://example.test/dead", "https://example.test/gone"] } });
+  await update(resumed, "ops-script", "오탐 중지", { enabled: true }, { enabled: false });
+  // A form saved again on a source paused before this week repeats enabled=false; it was not paused this week.
+  const earlier = await source("paused-before-this-week");
+  await sql`UPDATE sources SET enabled = false, health = 'paused' WHERE id = ${earlier}`;
+  await update(earlier, "admin:ou_test", "이름 변경", { enabled: false, name: "이전 이름" }, { enabled: false, name: earlier });
+  const text = await weekly();
+  assert.match(text, new RegExp(`금주 중지되어 현재까지 비활성인 정보원 1개:\\n· ${paused} \\(AI, [^)]+\\): 구독 피드 반복 404로 권한에 따라 일시 중지`));
+  assert.match(text, new RegExp(`금주 일부 경로가 제외된 정보원 1개:\\n· ${fenced} \\(관리자, [^,]+, https://example\\.test/dead 제외\\): 해당 원문 1건 404로 해당 URL만 제외\\n· ${fenced} \\(AI, [^,]+, https://example\\.test/gone 제외\\): 추가 원문 404 발생`));
+  assert.doesNotMatch(text, new RegExp(`· ${resumed}`), "a source enabled again is not listed as paused");
+  assert.doesNotMatch(text, new RegExp(`· ${earlier}`), "a source paused before this week is not listed as paused this week");
+});
+
+test("sources only a module uses are counted and named on their own, apart from the news sources", async () => {
+  const counts = async () => Number(/활성 정보원 (\d+)개/.exec(await weekly())![1]);
+  const before = await counts();
+  const watched = await source("module-only", "isolated");
+  const failing = await source("module-only-failing", "isolated");
+  await sql`UPDATE sources SET uses = ${["watch"]} WHERE id IN ${sql([watched, failing])}`;
+  await sql`UPDATE sources SET health = 'failing' WHERE id = ${failing}`;
+  const paused = await source("module-only-paused", "isolated");
+  await sql`UPDATE sources SET uses = ${["watch"]}, enabled = false, health = 'paused' WHERE id = ${paused}`;
+  await sql`INSERT INTO audit_log(actor,action,subject,reason,before,after,created_at) VALUES('ops-script','source.update',${`source:${paused}`},'계정이 비공개로 전환됨',${sql.json({ enabled: true })},${sql.json({ enabled: false })},${new Date(now - 86400_000)})`;
+  const text = await weekly();
+  assert.equal(await counts(), before, "the news sources in use are counted without them");
+  assert.match(text, /모듈 전용 정보원 별도 2개 \(주시 2\), 수집 실패 1개/);
+  assert.match(text, new RegExp(`· ${paused} \\(AI, [^,)]+, 주시 전용\\): 계정이 비공개로 전환됨`));
+});

@@ -1,0 +1,49 @@
+name: 버그 리포트 / Bug report
+description: 재현 가능한 오류나 장애를 제보하여 원인 파악 및 수정에 도움을 주세요.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        설치·배포 및 사용 관련 질문은 [Q&A 토론장](https://github.com/KKKKhazix/AIHOT/discussions/categories/q-a)을 이용해 주세요.
+        보안 취약점은 [비공개 보안 권고안](https://github.com/KKKKhazix/AIHOT/security/advisories/new)으로 제보해 주시기 바랍니다.
+        전체 `.env`, API 키, 관리자 비밀번호, 쿠키 또는 운영 데이터베이스 덤프는 업로드하지 마세요.
+  - type: input
+    id: revision
+    attributes:
+      label: 코드 버전
+      description: 저장소 루트에서 `git rev-parse --short HEAD`를 실행한 결과를 입력하거나, 템플릿으로 생성한 저장소인 경우 생성일 또는 최근 동기화 일자를 적어주세요.
+      placeholder: 커밋 해시 또는 다운로드/동기화 날짜
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 실행 환경
+      description: 운영체제, Docker 또는 직접 설치 여부, 관련 버전을 적어주세요. 웹 화면 문제인 경우 브라우저 정보도 함께 적어주세요.
+      placeholder: Ubuntu / Debian; Docker Compose / Node.js; 리버스 프록시 사용 여부; 관련 설정 변경 내역.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 재현 절차
+      description: 어떤 페이지, 명령어 또는 작업에서 시작했나요? 문제를 재현할 수 있는 최소 단계를 작성해 주세요.
+      placeholder: |
+        1. ... 열기
+        2. ... 실행
+        3. ... 발생
+    validations:
+      required: true
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: 기대 결과 및 실제 결과
+      placeholder: 기대 결과: ... / 실제 결과: ...
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 관련 로그 또는 스크린샷 (선택)
+      description: 핵심 로그 일부만 첨부하며, 제출 전 API 키·비밀번호·쿠키·개인정보를 반드시 제거하세요.

@@ -1,0 +1,381 @@
+import { describePublicationTime } from "../sources/dates.ts";
+// The writing side of the analysis: the prefilter's and the content understanding's inputs, the
+// title/summary prompts for everything else, the output parsing and the deterministic guards. The
+// wording lives in the industry pack (industry/prompts/); a failed guard falls back without a repair call.
+import { IDENTITY_CONTEXT_ALIASES, IDENTITY_LEXICON, PUBLISHER_DOMAINS } from "@aihot/industry/taxonomy";
+import { stripTagMarkup, isChineseText as looksZh } from "../lib/text.ts";
+export { isChineseText as looksZh } from "../lib/text.ts";
+import { onlyXArticleLink } from "../sources/x.ts";
+import type { AnalyzeInputArticle } from "./input.ts";
+import { promptText } from "./prompts.ts";
+
+export const PREFILTER_SYSTEM = promptText("prefilter");
+export const UNDERSTAND_SYSTEM = promptText("understand");
+
+/** A body longer than this is cut (whole bodies are sent; a few run past the context). */
+export const MAX_BODY_CHARS = 60_000;
+const capBody = (s: string) => (s.length > MAX_BODY_CHARS ? s.slice(0, MAX_BODY_CHARS) : s);
+
+// Text helpers
+
+export function clampText(s: string, maxChars: number): string {
+  const codepoints = Array.from(s);
+  return codepoints.length <= maxChars ? s : codepoints.slice(0, maxChars).join("") + "…";
+}
+
+/** Short tweet: under 100 characters of Chinese, under 500 of other text. */
+export function isShortTweet(text: string): boolean {
+  if (!text) return false;
+  const cjk = (text.match(/[\u4e00-\u9fff]/g) || []).length;
+  return text.length < (cjk > text.length * 0.3 ? 100 : 500);
+}
+
+/** HTML, URLs (whose /2025/ paths models took for years) and entities out of article text. */
+export function cleanArticleTextForLLM(s: string): string {
+  if (!s) return "";
+  return stripTagMarkup(s.replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " "))
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+/g, " ")
+    .replace(/[ \t]*\n[ \t]*/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function chineseDensity(s: string): number {
+  const chinese = (s.match(/[\u4e00-\u9fff]/g) ?? []).length;
+  const total = s.replace(/\s+/g, "").length;
+  return total === 0 ? 0 : chinese / total;
+}
+
+const stripNoise = (s: string) => s.replace(/https?:\/\/\S+/g, " ").replace(/@[A-Za-z0-9_]+/g, " ").replace(/#[A-Za-z0-9_]+/g, " ");
+
+/** A short tweet in Chinese needs no translation; mixed or English ones do. */
+export function needsShortTweetTranslation(text: string): boolean {
+  const clean = stripNoise(text);
+  if (!looksZh(clean)) return true;
+  if (chineseDensity(clean) < 0.65) return true;
+  const englishRuns = clean.match(/[A-Za-z][A-Za-z0-9+.#/-]*(?:\s+[A-Za-z][A-Za-z0-9+.#/-]*)+/g) ?? [];
+  return englishRuns.some((run) => run.replace(/\s+/g, "").length >= 10);
+}
+
+// The material as the prefilter and the content understanding read it
+
+/** The post is an X Article's link whose article could not be fetched. */
+const unfetchedXArticle = (a: AnalyzeInputArticle) => !!a.xPost && a.bodyStatus !== "ok" && onlyXArticleLink(String(a.xPost.text ?? ""));
+
+function materialQuality(a: AnalyzeInputArticle): string {
+  if (a.xPost) return "전문 본문 (RSS / API 자체 content 필드 제공)";
+  if (a.bodyText) return a.source.fetchesBody ? "전문 본문 (원문 웹페이지에서 수집)" : "전문 본문 (RSS / API 자체 content 필드 제공)";
+  if (a.excerpt) return "요약문만 있음 (피드에 전문 본문 미포함)";
+  if (a.bodyStatus === "unconfirmed") return "수집 실패, 제목만 사용 가능";
+  return "유효한 본문 텍스트 없음";
+}
+
+/** The material as the prefilter and the content understanding read it. */
+export function renderContext(a: AnalyzeInputArticle, opts: { annotateQuoted?: boolean } = {}): string {
+  const lines: string[] = [];
+  lines.push(`【출처】${a.source.name} (${a.source.kind}, tier=${a.source.tier || "미분류"})`);
+  if (a.source.tags?.length) lines.push(`【출처 태그】${a.source.tags.join(", ")}`);
+  const name = a.xPost?.authorName || a.author;
+  const handle = a.xPost?.handle;
+  if (name || handle) lines.push(`【작성자】${[name, handle ? `@${handle}` : null].filter(Boolean).join(" · ")}`);
+  if (a.publishedAt) lines.push(`【발행 시각】${describePublicationTime(a.publishedAt, a.publicationTime)}`);
+  const media = (a.xPost?.media ?? a.media ?? []) as Array<{ kind?: string }>;
+  const images = media.filter((m) => m.kind === "image").length;
+  const videos = media.filter((m) => m.kind === "video").length;
+  const mediaParts = [images ? `이미지 ${images}장` : null, videos ? `동영상 ${videos}개` : null, unfetchedXArticle(a) ? "X 장문 링크 포함(본문 미수집)" : null].filter(Boolean);
+  if (mediaParts.length) lines.push(`【미디어】${mediaParts.join(" · ")}`);
+  lines.push(`【원문 링크】${a.url}`);
+  lines.push(`【제목】${a.title}`);
+  const quoted = a.xPost?.quoted?.text ? a.xPost.quoted : null;
+  if (quoted) {
+    const label = quoted.handle ? `@${quoted.handle}` : "원본 게시물";
+    if (opts.annotateQuoted) {
+      lines.push(`【인용 ${label}】(아래는 작성자가 재인용한 **타인**의 콘텐츠이며, 작성자 본인의 발표 내용이 아님)`);
+      lines.push(String(quoted.text));
+    } else {
+      lines.push(`【인용 ${label}】${quoted.text}`);
+    }
+  }
+  lines.push("");
+  lines.push(opts.annotateQuoted && quoted ? "【본문(작성자 본인의 콘텐츠)】" : "【본문】");
+  lines.push(capBody(a.xPost ? String(a.xPost.text ?? a.title) : (a.bodyText ?? a.excerpt ?? "(본문 없음)")));
+  lines.push("");
+  lines.push(`【자료 품질】${materialQuality(a)}`);
+  return lines.join("\n");
+}
+
+/** The prefilter's user message: the context as a JSON string (the prompt was tuned on this form). */
+export const prefilterUser = (a: AnalyzeInputArticle) => JSON.stringify(renderContext(a));
+
+/** No text beyond the title: no body, feed excerpt, post or quoted text. */
+export function missingEvidence(a: AnalyzeInputArticle): boolean {
+  return !a.bodyText?.trim() && !a.excerpt?.trim() && !String(a.xPost?.text ?? "").trim() && !String(a.xPost?.quoted?.text ?? "").trim();
+}
+
+export const understandUser = (a: AnalyzeInputArticle) =>
+  ["시스템 규칙에 따라 다음 단일 자료를 분석하고 6개 필드를 한 번에 반환하세요.", renderContext(a, { annotateQuoted: true })].join("\n\n");
+
+// Identity context and guard
+
+const lexiconName = (id: string) => IDENTITY_LEXICON.find((e) => e.id === id)?.name ?? null;
+
+/** Known companies the texts name, by the pack's identity lexicon (each text on its own). */
+export function matchEntityIds(texts: Array<string | null | undefined>): string[] {
+  const list = texts.filter((t): t is string => typeof t === "string" && t.trim().length > 0);
+  return IDENTITY_LEXICON.filter((e) => e.patterns.some((p) => list.some((t) => p.test(t)))).map((e) => e.id);
+}
+
+/** A translation may rejoin a name (GPT 5.5 → GPT-5.5): the input counts in both spellings. */
+const surfaceVariants = (texts: Array<string | undefined>) => {
+  const exact = texts.filter((t): t is string => typeof t === "string" && t.trim().length > 0);
+  return [...exact, ...exact.map((t) => t.replace(/\b(gpt|glm)\s+(?=[o\d])/gi, "$1-"))];
+};
+
+function publisherEntityId(url?: string): string | null {
+  let host: string;
+  try {
+    host = new URL(url ?? "").hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  return PUBLISHER_DOMAINS.find((e) => e.domains.some((d) => host === d || host.endsWith(`.${d}`)))?.entityId ?? null;
+}
+
+export interface TranslateInput {
+  title: string;
+  text: string;
+  sourceKind: string;
+  sourceName?: string;
+  documentUrl?: string;
+  sourceOwnerEntityId?: string | null;
+  /** The main post of a tweet (not the quoted one), for the short/long decision. */
+  mainText?: string;
+  quotedText?: string;
+  quotedAuthor?: string;
+  publishedAt?: Date;
+  publicationTime?: string | null;
+}
+
+export function translateInputOf(a: AnalyzeInputArticle): TranslateInput {
+  const isX = a.source.kind === "x_search" || !!a.xPost;
+  const mainText = isX ? String(a.xPost?.text ?? a.title) : undefined;
+  return {
+    title: a.title,
+    text: isX ? (mainText ?? "") : (a.bodyText ?? a.excerpt ?? ""),
+    sourceKind: isX ? "x_search" : a.source.kind,
+    sourceName: a.source.name,
+    documentUrl: a.url,
+    sourceOwnerEntityId: a.source.ownerEntityId ?? null,
+    mainText,
+    quotedText: a.xPost?.quoted?.text ? String(a.xPost.quoted.text) : undefined,
+    quotedAuthor: a.xPost?.quoted?.handle ? String(a.xPost.quoted.handle) : undefined,
+    publishedAt: a.publishedAt ?? undefined,
+    publicationTime: a.publicationTime,
+  };
+}
+
+function identityContext(input: TranslateInput) {
+  const publisher = publisherEntityId(input.documentUrl);
+  const owner = input.sourceOwnerEntityId && lexiconName(input.sourceOwnerEntityId) ? input.sourceOwnerEntityId : null;
+  const texts = [input.title, input.text, input.mainText, input.quotedText, input.sourceName];
+  const allowed = new Set(matchEntityIds(surfaceVariants(texts)));
+  const joined = texts.filter(Boolean).join("\n");
+  for (const alias of IDENTITY_CONTEXT_ALIASES) if (alias.pattern.test(joined)) allowed.add(alias.entityId);
+  if (publisher) allowed.add(publisher);
+  if (owner) allowed.add(owner);
+  return { allowed: [...allowed].sort(), publisher, owner };
+}
+
+function identityPrompt(input: TranslateInput): string {
+  const ctx = identityContext(input);
+  const facts: string[] = [];
+  if (ctx.publisher) facts.push(`문서 발행 도메인 주체=${lexiconName(ctx.publisher) ?? ctx.publisher}`);
+  if (ctx.owner) facts.push(`출처 계정 주체=${lexiconName(ctx.owner) ?? ctx.owner}`);
+  return promptText("identity-context", { facts: facts.length > 0 ? facts.join("; ") : "명확한 발행 주체 미식별" });
+}
+
+export interface IdentityGuard {
+  outcome: "pass" | "fallback";
+  unsupportedTitleEntityIds: string[];
+  unsupportedSummaryEntityIds: string[];
+}
+
+/**
+ * A model only words the copy; it cannot introduce a company the input does not name. A title that
+ * does falls back to the original Chinese title (or nothing), a summary that does is dropped.
+ */
+export function enforceIdentity(input: TranslateInput, copy: { titleZh: string; summaryZh: string }) {
+  const allowed = new Set(identityContext(input).allowed);
+  const unsupportedTitleEntityIds = matchEntityIds([copy.titleZh]).filter((id) => !allowed.has(id));
+  const unsupportedSummaryEntityIds = matchEntityIds([copy.summaryZh]).filter((id) => !allowed.has(id));
+  return {
+    titleZh: unsupportedTitleEntityIds.length ? ((looksZh(input.title) || /\p{Script=Hangul}/u.test(input.title)) ? input.title : "") : copy.titleZh,
+    summaryZh: unsupportedSummaryEntityIds.length ? "" : copy.summaryZh,
+    identityGuard: {
+      outcome: unsupportedTitleEntityIds.length || unsupportedSummaryEntityIds.length ? "fallback" : "pass",
+      unsupportedTitleEntityIds,
+      unsupportedSummaryEntityIds,
+    } as IdentityGuard,
+  };
+}
+
+// Answer-first summary length
+
+export function compactAnswerFirstSummary(summary: string, maxChars = 190): string {
+  const text = summary.trim().replace(/\s*\n+\s*/g, " ");
+  if (text.length <= maxChars) return text;
+  const isKo = /\p{Script=Hangul}/u.test(text);
+  const sentences = isKo
+    ? (text.match(/.*?(?:[。！？!?]|(?<=[가-힣])[.](?=\s|$))\s*/gu)?.filter(Boolean) ?? [text])
+    : (text.match(/[^。！？!?]+[。！？!?]?/gu) ?? [text]);
+  let result = "";
+  for (const sentence of sentences) {
+    if ((result + sentence).length > maxChars) break;
+    result += sentence;
+    if (result.length >= 80) break;
+  }
+  // Whole sentences, even a short one, read better than half of the next.
+  if (result) return result.trim();
+  // The first sentence alone is too long: cut at a clause boundary, never inside a name, number or enumeration.
+  const clauses = text.match(/[^，；,;]+[，；,;]?/gu) ?? [text];
+  for (const clause of clauses) {
+    if ((result + clause).length + 1 > maxChars) break;
+    result += clause;
+    if (result.length >= 80) break;
+  }
+  return result.length >= 50 ? `${result.replace(/[，；,;]$/u, "")}${isKo ? "." : "。"}` : text;
+}
+
+function answerFirstSummaryLengthOk(summary: string, input: TranslateInput): boolean {
+  const trimmed = summary.trim();
+  const isKo = /\p{Script=Hangul}/u.test(trimmed);
+  const sourceLength = (input.sourceKind === "x_search" ? input.text : cleanArticleTextForLLM(input.text)).trim().length;
+  const sentences = isKo
+    ? trimmed.split(/(?:[。！？!?]|(?<=[가-힣])[.](?=\s|$))+/u).map((p) => p.trim()).filter(Boolean).length
+    : trimmed.split(/[。！？!?]+/u).map((p) => p.trim()).filter(Boolean).length;
+  const rich = sourceLength >= 500;
+  const maxLen = isKo ? 280 : 200;
+  return trimmed.length <= maxLen && trimmed.length >= (rich ? 80 : 50) && sentences <= 3 && (!rich || sentences >= 2);
+}
+
+export const isShortTweetInput = (input: TranslateInput) => input.sourceKind === "x_search" && isShortTweet(input.mainText || input.title);
+
+/** The length rule (compacted without another call) and the identity guard, for any writing model. */
+export function finalizeCopy(input: TranslateInput, copy: { titleZh: string; summaryZh: string }) {
+  let summaryZh = copy.summaryZh;
+  const isKo = /\p{Script=Hangul}/u.test(summaryZh);
+  if (!isShortTweetInput(input) && summaryZh && !answerFirstSummaryLengthOk(summaryZh, input)) summaryZh = compactAnswerFirstSummary(summaryZh, isKo ? 260 : 190);
+  return enforceIdentity(input, { titleZh: copy.titleZh, summaryZh });
+}
+
+// Title/summary prompts for items the content understanding does not write
+
+const sourceName = (name?: string) => name?.trim() || "(미기재)";
+
+function anchorDate(d: Date | undefined): string {
+  if (!d || Number.isNaN(d.getTime())) return "미기재";
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+
+export function buildArticlePrompt(input: TranslateInput): string {
+  return promptText("summarize-article", {
+    publishedDate: input.publicationTime?.length === 10 ? input.publicationTime : anchorDate(input.publishedAt),
+    today: anchorDate(new Date()),
+    sourceName: sourceName(input.sourceName),
+    identity: identityPrompt(input),
+    title: input.title,
+    body: input.text ? clampText(cleanArticleTextForLLM(input.text), 6000) : promptText("summarize-article-empty"),
+  });
+}
+
+/** The quoted post's block, appended after a blank line when there is one. */
+function quotedBlock(input: TranslateInput, name: string): string {
+  if (!input.quotedText) return "";
+  return `\n\n${promptText(name, { quotedLabel: input.quotedAuthor ? `@${input.quotedAuthor}` : "인용 게시물", quotedText: clampText(input.quotedText, 1500) })}`;
+}
+
+export function buildShortTweetPrompt(input: TranslateInput): string {
+  const post = clampText(input.mainText || input.text || input.title, 4000);
+  return promptText("summarize-short-post", { sourceName: sourceName(input.sourceName), identity: identityPrompt(input), post }) + quotedBlock(input, "summarize-short-post-quoted");
+}
+
+export function buildLongTweetPrompt(input: TranslateInput): string {
+  const post = clampText(input.mainText || input.text || input.title, 4000);
+  return promptText("summarize-long-post", { sourceName: sourceName(input.sourceName), identity: identityPrompt(input), post }) + quotedBlock(input, "summarize-long-post-quoted");
+}
+
+/** Prompt lines a model sometimes repeats after its answer (출처: …, 【검증된 주체 식별 문맥】…, 원문 제목: …). */
+const ECHO_LINE = /^(来源[:：]|출처[:：]|【已核验身份上下文】|【검증된 주체 식별 문맥】|这些事实只用于防止|이 사실 정보는|原始标题[:：]|원문 제목[:：]|【时间锚点】|【시간 앵커】)/;
+
+/** The answer without prompt lines repeated at its end. */
+export function stripEcho(text: string): string {
+  const lines = text.split("\n");
+  while (lines.length && (lines[lines.length - 1]!.trim() === "" || ECHO_LINE.test(lines[lines.length - 1]!.trim()))) lines.pop();
+  return lines.join("\n").trim();
+}
+
+/** `title_zh:` / `summary_zh:` / `body_zh:` lines, with fallbacks for answers that drop the labels. */
+export function parseTranslateOutput(text: string): { titleZh: string; summaryZh: string; bodyZh: string } {
+  let titleZh = "";
+  let summaryZh = "";
+  let bodyZh = "";
+  let titleLine = -1;
+  let summaryLine = -1;
+  let bodyLine = -1;
+  const clean = text.replace(/<thought>[\s\S]*?<\/thought>/gi, "").trim();
+  const lines = clean.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const t = lines[i]!.trim();
+    const title = t.match(/^title_zh\s*[:：]\s*(.*)$/);
+    if (title) { titleZh = title[1]!.trim(); titleLine = i; continue; }
+    const summary = t.match(/^summary_zh\s*[:：]\s*(.*)$/);
+    if (summary) { summaryZh = summary[1]!.trim(); summaryLine = i; continue; }
+    const body = t.match(/^body_zh\s*[:：]\s*(.*)$/);
+    if (body) { bodyZh = body[1]!.trim(); bodyLine = i; continue; }
+  }
+  // A title without a labelled summary or body: the lines after it are the summary.
+  if (titleZh && !summaryZh && bodyLine < 0 && titleLine >= 0) {
+    const rest = lines.slice(titleLine + 1).map((l) => l.trim()).filter(Boolean);
+    if (rest.length) summaryZh = rest.join("\n");
+  }
+  // A summary split over lines: join the unlabelled lines after it.
+  if (summaryLine >= 0) {
+    const more: string[] = [];
+    for (let i = summaryLine + 1; i < lines.length; i += 1) {
+      const t = lines[i]!.trim();
+      if (!t) continue;
+      if (/^(title_zh|summary_zh|body_zh)\s*[:：]/.test(t)) break;
+      more.push(t);
+    }
+    const parts = [summaryZh, ...more].filter(Boolean);
+    if (parts.length) summaryZh = parts.join("\n");
+  }
+  // A body over lines keeps its paragraph breaks.
+  if (bodyLine >= 0) {
+    const more: string[] = [];
+    for (let i = bodyLine + 1; i < lines.length; i += 1) {
+      if (/^(title_zh|summary_zh|body_zh)\s*[:：]/.test(lines[i]!.trim())) break;
+      more.push(lines[i]!);
+    }
+    while (more.length && more[more.length - 1]!.trim() === "") more.pop();
+    const parts = bodyZh ? [bodyZh, ...more] : more;
+    if (parts.length) bodyZh = parts.join("\n");
+  }
+  if (!titleZh && !summaryZh && !bodyZh) {
+    const rest = text.trim().split(/\r?\n/).filter(Boolean);
+    if (rest.length >= 2) {
+      titleZh = rest[0]!.trim();
+      summaryZh = rest.slice(1).join("\n").trim();
+    } else if (rest.length === 1) {
+      titleZh = rest[0]!.trim();
+    }
+  }
+  return { titleZh, summaryZh: stripEcho(summaryZh), bodyZh: stripEcho(bodyZh) };
+}

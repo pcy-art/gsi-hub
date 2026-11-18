@@ -1,0 +1,14 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 배포 및 사용 Q&A
+    url: https://github.com/KKKKhazix/AIHOT/discussions/categories/q-a
+    about: 설치, 설정, 배포 및 운영 중 발생한 질문.
+  - name: 아이디어 토론
+    url: https://github.com/KKKKhazix/AIHOT/discussions/categories/ideas
+    about: 구체적인 개발 태스크로 옮기기 전에 아이디어와 방향성을 논의합니다.
+  - name: 구축 사례 공유 (Show & Tell)
+    url: https://github.com/KKKKhazix/AIHOT/discussions/categories/show-and-tell
+    about: 직접 구축한 산업별 핫이슈 사이트와 운영 경험을 공유해 보세요.
+  - name: 비공개 보안 취약점 제보
+    url: https://github.com/KKKKhazix/AIHOT/security/advisories/new
+    about: 보안 취약점은 공개 Issue에 세부 내용을 노출하지 말고 이 창구로 제출해 주세요.
